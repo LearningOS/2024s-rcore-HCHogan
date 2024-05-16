@@ -14,9 +14,12 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::config::MAX_APP_NUM;
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
+use crate::{
+    config::{MAX_APP_NUM, MAX_SYSCALL_NUM},
+    timer::get_time_ms,
+};
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
@@ -35,6 +38,8 @@ pub use context::TaskContext;
 pub struct TaskManager {
     /// total number of tasks
     num_app: usize,
+    /// time since first task starts
+    start_time: usize,
     /// use inner value to get mutable access
     inner: UPSafeCell<TaskManagerInner>,
 }
@@ -54,6 +59,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            task_syscall_times: [0; MAX_SYSCALL_NUM],
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -61,6 +67,7 @@ lazy_static! {
         }
         TaskManager {
             num_app,
+            start_time: get_time_ms(),
             inner: unsafe {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
@@ -168,4 +175,30 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// Add syscall times of current task
+pub fn add_syscall_times(syscall_id: usize) {
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    inner.tasks[current].task_syscall_times[syscall_id] += 1;
+}
+
+/// Get current task status
+pub fn get_task_status() -> TaskStatus {
+    let inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    inner.tasks[current].task_status
+}
+
+/// Get current task syscall times
+pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    let inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    inner.tasks[current].task_syscall_times
+}
+
+/// Get time since first task starts
+pub fn get_start_time() -> usize {
+    TASK_MANAGER.start_time
 }
