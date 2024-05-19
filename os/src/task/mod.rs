@@ -14,9 +14,14 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
+use crate::{
+    config::MAX_SYSCALL_NUM,
+    loader::{get_app_data, get_num_app},
+    mm::{MapPermission, VirtAddr},
+    timer::get_time_ms,
+};
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
@@ -36,6 +41,8 @@ pub use context::TaskContext;
 pub struct TaskManager {
     /// total number of tasks
     num_app: usize,
+    /// time since first task starts
+    start_time: usize,
     /// use inner value to get mutable access
     inner: UPSafeCell<TaskManagerInner>,
 }
@@ -60,6 +67,7 @@ lazy_static! {
         }
         TaskManager {
             num_app,
+            start_time: get_time_ms(),
             inner: unsafe {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
@@ -201,4 +209,51 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Add syscall times of current task
+pub fn add_syscall_times(syscall_id: usize) {
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    inner.tasks[current].task_syscall_times[syscall_id] += 1;
+}
+
+/// Get current task status
+pub fn get_task_status() -> TaskStatus {
+    let inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    inner.tasks[current].task_status
+}
+
+/// Get current task syscall times
+pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    let inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    inner.tasks[current].task_syscall_times
+}
+
+/// Get time since first task starts
+pub fn get_start_time() -> usize {
+    TASK_MANAGER.start_time
+}
+
+/// mmap for ch4
+pub fn mmap(start_va: VirtAddr, end_va: VirtAddr, perm: MapPermission) -> bool {
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+
+    let current = inner.current_task;
+    if inner.tasks[current].memory_set.is_mapped(start_va, end_va) {
+        return false;
+    }
+    inner.tasks[current]
+        .memory_set
+        .insert_framed_area(start_va, end_va, perm);
+    true
+}
+
+/// munmap for ch4
+pub fn munmap(start_va: VirtAddr, end_va: VirtAddr) -> bool {
+    let current = TASK_MANAGER.inner.exclusive_access().current_task;
+    TASK_MANAGER.inner.exclusive_access().tasks[current].memory_set.delete_area(start_va, end_va);
+    true
 }

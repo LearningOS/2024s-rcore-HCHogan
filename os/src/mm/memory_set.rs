@@ -63,6 +63,16 @@ impl MemorySet {
             None,
         );
     }
+    /// delete one area
+    pub fn delete_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) {
+        let vpn_range = VPNRange::new(start_va.into(), end_va.into());
+        self.areas
+            .iter_mut()
+            .filter(|area| area.vpn_range.is_overlapped_with(&vpn_range))
+            .for_each(|area| area.unmap(&mut self.page_table));
+        self.areas
+            .retain(|area| !area.vpn_range.is_overlapped_with(&vpn_range));
+    }
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {
@@ -261,6 +271,14 @@ impl MemorySet {
         } else {
             false
         }
+    }
+
+    /// is given vpn range already mapped
+    pub fn is_mapped(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let vpn_range = VPNRange::new(start_va.into(), end_va.into());
+        self.areas
+            .iter()
+            .any(|area| area.vpn_range.is_overlapped_with(&vpn_range))
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory

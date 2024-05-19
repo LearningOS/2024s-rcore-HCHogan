@@ -14,12 +14,15 @@
 
 mod context;
 
-use crate::config::{TRAMPOLINE, TRAP_CONTEXT_BASE};
 use crate::syscall::syscall;
 use crate::task::{
     current_trap_cx, current_user_token, exit_current_and_run_next, suspend_current_and_run_next,
 };
 use crate::timer::set_next_trigger;
+use crate::{
+    config::{TRAMPOLINE, TRAP_CONTEXT_BASE},
+    task::add_syscall_times,
+};
 use core::arch::{asm, global_asm};
 use riscv::register::{
     mtvec::TrapMode,
@@ -60,11 +63,13 @@ pub fn trap_handler() -> ! {
     let cx = current_trap_cx();
     let scause = scause::read(); // get trap cause
     let stval = stval::read(); // get extra value
-    // trace!("into {:?}", scause.cause());
+                               // trace!("into {:?}", scause.cause());
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
             cx.sepc += 4;
+            // log syscall
+            add_syscall_times(cx.x[17]);
             // get system call return value
             cx.x[10] = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]) as usize;
         }
