@@ -21,7 +21,11 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::loader::get_app_data_by_name;
+use crate::{
+    config::MAX_SYSCALL_NUM,
+    loader::get_app_data_by_name,
+    mm::{MapPermission, VirtAddr},
+};
 use alloc::sync::Arc;
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
@@ -30,7 +34,7 @@ pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
 pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-pub use manager::add_task;
+pub use manager::{add_task, get_start_time};
 pub use processor::{
     current_task, current_trap_cx, current_user_token, run_tasks, schedule, take_current_task,
     Processor,
@@ -114,4 +118,46 @@ lazy_static! {
 ///Add init process to the manager
 pub fn add_initproc() {
     add_task(INITPROC.clone());
+}
+
+/// Syscall times statistics
+pub fn add_syscall_times(syscall_id: usize) {
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    inner.task_syscall_times[syscall_id] += 1;
+}
+
+/// get syscall times
+pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .task_syscall_times
+}
+
+/// mmap for ch4
+pub fn mmap(start_va: VirtAddr, end_va: VirtAddr, perm: MapPermission) -> bool {
+    let current = current_task().unwrap();
+    if current
+        .inner_exclusive_access()
+        .memory_set
+        .is_mapped(start_va, end_va)
+    {
+        return false;
+    }
+    current
+        .inner_exclusive_access()
+        .memory_set
+        .insert_framed_area(start_va, end_va, perm);
+    true
+}
+
+/// munmap for ch4
+pub fn munmap(start_va: VirtAddr, end_va: VirtAddr) -> bool {
+    let current = current_task().unwrap();
+    current
+        .inner_exclusive_access()
+        .memory_set
+        .delete_area(start_va, end_va);
+    true
 }

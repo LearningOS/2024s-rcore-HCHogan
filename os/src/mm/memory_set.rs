@@ -72,6 +72,16 @@ impl MemorySet {
             self.areas.remove(idx);
         }
     }
+    /// delete one area
+    pub fn delete_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) {
+        let vpn_range = VPNRange::new(start_va.into(), end_va.into());
+        self.areas
+            .iter_mut()
+            .filter(|area| area.vpn_range.is_overlapped_with(&vpn_range))
+            .for_each(|area| area.unmap(&mut self.page_table));
+        self.areas
+            .retain(|area| !area.vpn_range.is_overlapped_with(&vpn_range));
+    }
     /// Add a new MapArea into this MemorySet.
     /// Assuming that there are no conflicts in the virtual address
     /// space.
@@ -299,6 +309,13 @@ impl MemorySet {
         } else {
             false
         }
+    }
+    /// is given vpn range already mapped
+    pub fn is_mapped(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let vpn_range = VPNRange::new(start_va.into(), end_va.into());
+        self.areas
+            .iter()
+            .any(|area| area.vpn_range.is_overlapped_with(&vpn_range))
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory

@@ -227,6 +227,9 @@ where
     pub fn get_end(&self) -> T {
         self.r
     }
+    pub fn is_overlapped_with(&self, other: &Self) -> bool {
+        self.get_end() > other.get_start() && self.get_start() < other.get_end()
+    }
 }
 impl<T> IntoIterator for SimpleRange<T>
 where
