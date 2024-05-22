@@ -94,8 +94,11 @@ impl TaskControlBlockInner {
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
     }
-    pub fn set_pride(&mut self, pride: usize) {
-        self.pass = BIG_STRIDE / pride;
+    pub fn set_prio(&mut self, prio: usize) {
+        self.pass = BIG_STRIDE / prio;
+    }
+    pub fn add_stride(&mut self) {
+        self.stride += self.pass;
     }
 }
 
@@ -132,7 +135,7 @@ impl TaskControlBlock {
                     program_brk: user_sp,
                     task_syscall_times: [0; MAX_SYSCALL_NUM],
                     stride: 0,
-                    pass: 2
+                    pass: 16
                 })
             },
         };
@@ -207,8 +210,8 @@ impl TaskControlBlock {
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
                     task_syscall_times: [0; MAX_SYSCALL_NUM],
-                    stride: parent_inner.stride,
-                    pass: parent_inner.pass,
+                    stride: 0,
+                    pass: 16,
                 })
             },
         });

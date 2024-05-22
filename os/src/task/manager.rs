@@ -31,12 +31,13 @@ impl TaskManager {
             .iter()
             .enumerate()
             .min_by_key(|&(_, value)| {
-                let stride = value.inner_exclusive_access().stride;
-                let pass = value.inner_exclusive_access().pass;
-                value.inner_exclusive_access().stride += pass;
-                stride
+                value.inner_exclusive_access().stride
             })
-            .map(|(index, _)| index)?;
+            .map(|(index, tcb)| {
+                tcb.inner_exclusive_access().add_stride();
+                index
+            })?;
+        // println!("kernel: schedu task {}", min_index);
         self.ready_queue.remove(min_index)
     }
 }
